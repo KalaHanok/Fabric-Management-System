@@ -9,7 +9,7 @@ def initialize_app():
 
     # Create the main window for the application
     root = tk.Tk()
-    root.title("Fabric Management System")
+    root.title("Siri Matching and Collection")
 
     # Set window size and make it non-resizable (optional)
     root.geometry("800x600")

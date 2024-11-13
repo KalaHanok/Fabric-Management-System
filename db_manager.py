@@ -1,13 +1,35 @@
 import sqlite3
 from datetime import datetime
 
+import sys
+import os
+
+if getattr(sys, 'frozen', False):  # Check if it's running as an executable
+    base_path = sys._MEIPASS
+else:
+    base_path = os.path.abspath(".")
+
+db_path = os.path.join(base_path, 'fabric_management.db')
+print("Database Path:", db_path)
+
+
 class DBManager:
     def __init__(self, db_name="fabric_management.db"):
         """Initialize and connect to the database."""
-        self.conn = sqlite3.connect(db_name)
+        self.conn = sqlite3.connect(db_path)
+        if self.conn:
+            print("Connection is established")
+        else:
+            print("connection is  not established")
         self.cursor = self.conn.cursor()
         self.create_tables()
-
+    def test_connection(self):
+        try:
+            self.cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = self.cursor.fetchall()
+            print("Tables:", tables)
+        except Exception as e:
+            print("Error:", e)
     def create_tables(self):
         """Create necessary tables if they don't exist."""
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS fabrics (
@@ -124,6 +146,12 @@ class DBManager:
         self.cursor.execute("SELECT fabric_id FROM fabrics WHERE fabric_name = ?", (fabric_name,))
         result = self.cursor.fetchone()
         return result[0] if result else None
+    def search_fabrics(self, search_term):
+        # Query to search for fabrics that match the input text
+        query = "SELECT fabric_name FROM fabrics WHERE fabric_name LIKE ?"
+        self.cursor.execute(query, ('%' + search_term + '%',))
+        result = self.cursor.fetchall()
+        return [row[0] for row in result]  # Assuming fabric_name is the first column
     def get_fabric_name_by_id(self,  fabric_id):
         """Get the fabric name from the fabric ID."""
         self.cursor.execute("SELECT fabric_name FROM fabrics WHERE fabric_id = ?", (fabric_id,))
@@ -131,32 +159,80 @@ class DBManager:
         return result[0] if result else None
     def get_fabrics_list(self):
         """Get a list of fabrics from the database to populate the combo boxes."""
-        self.db_manager.cursor.execute("SELECT fabric_name FROM fabrics")
-        fabrics = self.db_manager.cursor.fetchall()
-        return [fabric[1] for fabric in fabrics]
+        self.cursor.execute("SELECT fabric_name FROM fabrics")
+        fabrics = self.cursor.fetchall()
+        return [fabric[0] for fabric in fabrics]
     def get_fabric_stock(self, fabric_name):
         """Get stock for a specific fabric."""
         self.cursor.execute("SELECT stock FROM fabrics WHERE fabric_name = ?", (fabric_name,))
         result = self.cursor.fetchone()
         if result:
             return result[0]
+    def get_fabric_stock_by_id(self, fabric_id):
+        """Get stock for a specific fabric."""
+        self.cursor.execute("SELECT stock FROM fabrics WHERE fabric_id = ?", (fabric_id,))
+        result = self.cursor.fetchone()
+        if result:
+            return result[0]
+    def get_all_fabrics(self):
+        """Get stock for a specific fabric."""
+        self.cursor.execute("SELECT fabric_id, fabric_name, stock from fabrics")
+        result = self.cursor.fetchall()
+        if result:
+            return result
     def get_all_fabrics_stock(self):
         """Get stock levels for all fabrics."""
-        self.cursor.execute("SELECT fabric_name, stock FROM fabrics")
+        self.cursor.execute("SELECT fabric_id, fabric_name, stock FROM fabrics")
         return self.cursor.fetchall()
     
     def get_sales_data(self, start_date, end_date):
         """ Get the sales data from start_date to end_date"""
-        self.cursor.execute("select sales.sale_date, fabrics.fabric_name, sales.quantity, sales.selling_price, sales.quantity*sales.selling_price as revenue from sales join fabrics on sales.fabric_id = fabrics.fabric_id where sales.sale_date BETWEEN ? and ? order by sales.sale_date desc",(start_date,end_date))
+        self.cursor.execute("select sales.sale_id, sales.sale_date, fabrics.fabric_name, sales.quantity, sales.selling_price, sales.quantity*sales.selling_price as revenue from sales join fabrics on sales.fabric_id = fabrics.fabric_id where sales.sale_date BETWEEN ? and ? order by sales.sale_date desc",(start_date,end_date))
         return self.cursor.fetchall()
 
     def get_purchase_data(self, start_date, end_date):
         """ Get the purchase  data of stocks from start_date to end_date"""
-        self.cursor.execute('''select purchases.purchase_date, fabrics.fabric_name, purchases.quantity, purchases.cost_price, purchases.quantity*purchases.cost_price as expendicture 
+        self.cursor.execute('''select purchases.purchase_id, purchases.purchase_date, fabrics.fabric_name, purchases.quantity, purchases.cost_price, purchases.quantity*purchases.cost_price as expendicture 
                             from purchases join fabrics on purchases.fabric_id = fabrics.fabric_id 
                             where purchases.purchase_date BETWEEN ? and ? order by purchases.purchase_date desc''',(start_date,end_date))
         return self.cursor.fetchall()
 
+    def get_sale_by_id(self,id):
+        """Get sales by sales_id"""
+        self.cursor.execute('''SELECT * from sales where sale_id=?''',(id,))
+        return self.cursor.fetchone()
+    
+    def get_purchase_by_id(self, id):
+        """Get purchase by purchase_id"""
+        self.cursor.execute('''SELECT * from purchases where purchase_id=?''',(id,))
+        return self.cursor.fetchone()
+    def update_sale_data(self, sale_id, quantity, selling_price, sale_date):
+        query = """
+            UPDATE sales
+            SET quantity = ?, selling_price = ?, sale_date = ?
+            WHERE sale_id = ?
+        """
+        self.cursor.execute(query, (quantity, selling_price, sale_date, sale_id))
+        self.conn.commit()
+
+    def update_purchase_data(self,purchase_id, quantity, cost_price, purchase_date):
+        query = """
+            UPDATE purchases
+            SET quantity = ?, cost_price = ?, purchase_date = ?
+            WHERE purchase_id = ?
+        """
+        res=self.cursor.execute(query, (quantity, cost_price, purchase_date, purchase_id))
+        self.conn.commit()
+        return res
+    def update_fabric_name(self, fabric_id,fabric_name):
+        query = """
+            UPDATE fabrics
+            SET fabric_name = ?
+            WHERE fabric_id = ?
+        """
+        res=self.cursor.execute(query, (fabric_name,fabric_id))
+        self.conn.commit()
+        return  res
     def close(self):
         """Close the database connection."""
         self.conn.close()
