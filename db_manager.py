@@ -5,7 +5,7 @@ import sys
 import os
 
 if getattr(sys, 'frozen', False):  # Check if it's running as an executable
-    base_path = sys._MEIPASS
+    base_path = os.getcwd()
 else:
     base_path = os.path.abspath(".")
 
@@ -68,10 +68,11 @@ class DBManager:
     def update_stock(self, fabric_id, quantity, operation="add"):
         """Update fabric stock by adding or subtracting the quantity."""
         if operation == "add":
-            self.cursor.execute("UPDATE fabrics SET stock = stock + ? WHERE fabric_id = ?", (quantity, fabric_id))
+            res=self.cursor.execute("UPDATE fabrics SET stock = stock + ? WHERE fabric_id = ?", (quantity, fabric_id))
         elif operation == "subtract":
-            self.cursor.execute("UPDATE fabrics SET stock = stock - ? WHERE fabric_id = ?", (quantity, fabric_id))
+            res=self.cursor.execute("UPDATE fabrics SET stock = stock - ? WHERE fabric_id = ?", (quantity, fabric_id))
         self.conn.commit()
+        return res
 
     def get_fabric_stock(self, fabric_name):
         """Get the stock of a particular fabric."""
@@ -129,7 +130,11 @@ class DBManager:
                 GROUP BY fabric_id
             )
             SELECT sales_record.fabric_id,
+                sales_record.total_sales,
+                latest_cost.cost_price,
+                sales_record.selling_price,
                 sales_record.total_sales * sales_record.selling_price as revenue,
+                sales_record.total_sales * latest_cost.cost_price as cost,
                 sales_record.total_sales * sales_record.selling_price - 
                 sales_record.total_sales * latest_cost.cost_price AS profit
             FROM latest_cost 
@@ -182,9 +187,26 @@ class DBManager:
             return result
     def get_all_fabrics_stock(self):
         """Get stock levels for all fabrics."""
-        self.cursor.execute("SELECT fabric_id, fabric_name, stock FROM fabrics")
+        self.cursor.execute("""
+                                WITH latest_cost AS (
+                                SELECT fabric_id, SUM(quantity*cost_price)/SUM(quantity) AS cost_price 
+                                FROM purchases 
+                                GROUP BY fabric_id
+                                )
+                                select fabrics.fabric_id, fabrics.fabric_name, fabrics.stock, COALESCE(latest_cost.cost_price,0) as cost_price, COALESCE(latest_cost.cost_price*stock,0) as total_cost 
+                                from fabrics left join latest_cost on fabrics.fabric_id = latest_cost.fabric_id
+                            """)
         return self.cursor.fetchall()
     
+    def get_purchase_cost(self, fabric_id):
+        self.cursor.execute("""
+                                SELECT fabric_id, SUM(quantity*cost_price)/SUM(quantity) AS cost_price 
+                                FROM purchases 
+                                where fabric_id=?
+                            """,(fabric_id,))
+        return self.cursor.fetchone()[1]
+        
+
     def get_sales_data(self, start_date, end_date):
         """ Get the sales data from start_date to end_date"""
         self.cursor.execute("select sales.sale_id, sales.sale_date, fabrics.fabric_name, sales.quantity, sales.selling_price, sales.quantity*sales.selling_price as revenue from sales join fabrics on sales.fabric_id = fabrics.fabric_id where sales.sale_date BETWEEN ? and ? order by sales.sale_date desc",(start_date,end_date))
@@ -196,7 +218,7 @@ class DBManager:
                             from purchases join fabrics on purchases.fabric_id = fabrics.fabric_id 
                             where purchases.purchase_date BETWEEN ? and ? order by purchases.purchase_date desc''',(start_date,end_date))
         return self.cursor.fetchall()
-
+    
     def get_sale_by_id(self,id):
         """Get sales by sales_id"""
         self.cursor.execute('''SELECT * from sales where sale_id=?''',(id,))
@@ -212,8 +234,9 @@ class DBManager:
             SET quantity = ?, selling_price = ?, sale_date = ?
             WHERE sale_id = ?
         """
-        self.cursor.execute(query, (quantity, selling_price, sale_date, sale_id))
+        res=self.cursor.execute(query, (quantity, selling_price, sale_date, sale_id))
         self.conn.commit()
+        return res
 
     def update_purchase_data(self,purchase_id, quantity, cost_price, purchase_date):
         query = """

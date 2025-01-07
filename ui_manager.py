@@ -70,19 +70,23 @@ class UIManager:
         self.fabric_selector_summary = SearchableComboBox(self.tab_summary, self.db_manager,1,1,ALL=True)
 
         # Create a table for displaying individual fabric stocks (when "All" is selected)
-        self.tree_fabric_stock = ttk.Treeview(self.tab_summary, columns=("Id","Fabric", "Stock","Edit"), show="headings", height=5)
+        self.tree_fabric_stock = ttk.Treeview(self.tab_summary, columns=("Id","Fabric", "Stock","Cost price","Total cost","Edit"), show="headings", height=5)
         self.tree_fabric_stock.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
 
         # Define the headings for the stock table
         self.tree_fabric_stock.heading("Id", text="Id")
         self.tree_fabric_stock.heading("Fabric", text="Fabric")
         self.tree_fabric_stock.heading("Stock", text="Stock (units)")
+        self.tree_fabric_stock.heading("Cost price", text="Cost price (Rs)")
+        self.tree_fabric_stock.heading("Total cost", text="Total cost (Rs)")
         self.tree_fabric_stock.heading("Edit", text="Edit")
         
         # Adjust column widths
         self.tree_fabric_stock.column("Id", width=150, anchor="center")
         self.tree_fabric_stock.column("Fabric", width=150,anchor="center")
         self.tree_fabric_stock.column("Stock", width=150, anchor="center")
+        self.tree_fabric_stock.column("Cost price", width=150, anchor="center")
+        self.tree_fabric_stock.column("Total cost", width=150, anchor="center")
         self.tree_fabric_stock.column("Edit", width=150, anchor="center")
 
         # Create labels for displaying profit loss information
@@ -93,19 +97,27 @@ class UIManager:
         self.label_total_stock.grid(row=3, column=1, padx=20, pady=10, sticky="e")
 
         # Create a table for displaying profit/loss information
-        self.tree_profit_loss = ttk.Treeview(self.tab_summary, columns=("Id","Fabric", "Revenue", "Profit/Loss"), show="headings", height=5)
+        self.tree_profit_loss = ttk.Treeview(self.tab_summary, columns=("Id","Fabric","Units sold","Cost price","Selling price", "Revenue","Expenditure", "Profit/Loss"), show="headings", height=5)
         self.tree_profit_loss.grid(row=4, column=0, columnspan=3, padx=10, pady=10, sticky="nsew")
 
         # Define the headings for the profit/loss table
         self.tree_profit_loss.heading("Id", text="Id")
         self.tree_profit_loss.heading("Fabric", text="Fabric")
+        self.tree_profit_loss.heading("Units sold", text="Units sold")
+        self.tree_profit_loss.heading("Cost price", text="Cost price")
+        self.tree_profit_loss.heading("Selling price", text="Selling price")
         self.tree_profit_loss.heading("Revenue", text="Revenue")
+        self.tree_profit_loss.heading("Expenditure", text="Expenditure")
         self.tree_profit_loss.heading("Profit/Loss", text="Profit/Loss (₹)")
         
         # Adjust column widths
         self.tree_profit_loss.column("Id", width=150, anchor="center")
         self.tree_profit_loss.column("Fabric", width=150, anchor="center")
+        self.tree_profit_loss.column("Units sold", width=150, anchor="center")
+        self.tree_profit_loss.column("Cost price", width=150, anchor="center")
+        self.tree_profit_loss.column("Selling price", width=150, anchor="center")
         self.tree_profit_loss.column("Revenue", width=150, anchor="center")
+        self.tree_profit_loss.column("Expenditure", width=150, anchor="center")
         self.tree_profit_loss.column("Profit/Loss", width=150, anchor="center")
 
         # Add date range inputs for selecting the start and end dates
@@ -253,7 +265,7 @@ class UIManager:
         self.entry_end_date_purchase.grid(row=6, column=1, padx=10, pady=10, sticky="w")
 
         # Button to fetch sales data
-        self.btn_fetch_purchases = tk.Button(self.tab_purchase, text="fetch sales", command=self.fetch_purchases)
+        self.btn_fetch_purchases = tk.Button(self.tab_purchase, text="fetch purchases", command=self.fetch_purchases)
         self.btn_fetch_purchases.grid(row=7, column=0, columnspan=2, pady=20, sticky="nsew")
 
         self.purchases_record_tree.column("Date", anchor="center")
@@ -311,7 +323,7 @@ class UIManager:
             else:
                 messagebox.showerror("Error", response["error"])
         except ValueError:
-            messagebox.showerror("Error", "Cost Price must be a valid number.")
+            messagebox.showerror("Error", "Error while adding..")
 
     # ---- Helper Methods for Sales and Purchases ----
     def get_fabrics_list(self):
@@ -402,9 +414,12 @@ class UIManager:
 
                 # Insert stock data for all fabrics
                 all_fabrics_stock = self.db_manager.get_all_fabrics_stock()
-                for fabric_id ,fabric_name, stock in all_fabrics_stock:
-                    self.tree_fabric_stock.insert("", "end", values=(fabric_id, fabric_name, stock,"Edit"))
+                all_total_cost=0
+                for fabric_id ,fabric_name, stock,cost_price, total_cost in all_fabrics_stock:
+                    self.tree_fabric_stock.insert("", "end", values=(fabric_id, fabric_name, stock,cost_price,total_cost,"Edit"))
+                    all_total_cost+=total_cost
                 self.tree_fabric_stock.bind("<Button-1>", self.on_treeview_click)
+                self.label_stock_value.config(text=f"total cost: ₹{all_total_cost:.2f}", fg="red")
                 if len(profit_loss)>0:
                     # Clear the profit/loss table before inserting new data
                     for row in self.tree_profit_loss.get_children():
@@ -412,27 +427,30 @@ class UIManager:
 
                     # Insert profit/loss data into the table
                     total_revenue=0
+                    total_expenditure=0
                     total_profit_loss=0
                     for pf in profit_loss:
-                        total_revenue+=pf[1]
-                        total_profit_loss+=pf[2]
+                        total_revenue+=pf[4]
+                        total_expenditure+=pf[5]
+                        total_profit_loss+=pf[6]
                         fabric_name = self.db_manager.get_fabric_name_by_id(pf[0])
-                        self.tree_profit_loss.insert("", "end", values=(pf[0],fabric_name,f'₹{pf[1]:.2f}', f"₹{pf[2]:.2f}"))
+                        self.tree_profit_loss.insert("", "end", values=(pf[0],fabric_name,f'{pf[1]:.2f}', f"₹{pf[2]:.2f}", f"₹{pf[3]:.2f}", f"₹{pf[4]:.2f}", f"₹{pf[5]:.2f}", f"₹{pf[6]:.2f}"))
                     if total_profit_loss!=0 and total_revenue!=0:
-                        self.tree_profit_loss.insert("", "end", values=("Total","",f'₹{total_revenue:.2f}', f"₹{total_profit_loss:.2f}"))
+                        self.tree_profit_loss.insert("", "end", values=("Total","","","","",f'₹{total_revenue:.2f}',f'₹{total_expenditure:.2f}', f"₹{total_profit_loss:.2f}"))
             else:
                 # Get stock and profit/loss for the selected fabric
                 selected_fabric = self.fabric_selector_summary.selected_option
                 fabric_id = self.db_manager.get_fabric_id(selected_fabric)
                 fabric_stock = self.db_manager.get_fabric_stock(selected_fabric)
+                cost_price = self.db_manager.get_purchase_cost(fabric_id)
+                total_cost = cost_price*fabric_stock
                 profit_loss = self.db_manager.get_total_profit_loss(start_date,end_date) if start_date !="" and end_date !="" else []
-
-                self.label_stock_value.config(text=f"{fabric_stock} units")
+                self.label_stock_value.config(text=f"{fabric_stock} units total cost: ₹{total_cost:.2f}", fg="red")
 
                 # Clear the stock tables
                 for row in self.tree_fabric_stock.get_children():
                     self.tree_fabric_stock.delete(row)
-                self.tree_fabric_stock.insert("", "end", values=(fabric_id,selected_fabric, fabric_stock, "Edit"))
+                self.tree_fabric_stock.insert("", "end", values=(fabric_id,selected_fabric, fabric_stock, cost_price,total_cost, "Edit"))
                 self.tree_fabric_stock.bind("<Button-1>", self.on_treeview_click)
 
                 # Insert selected fabric's stock and profit/loss into the tables
@@ -443,17 +461,20 @@ class UIManager:
 
                     # Insert profit/loss data into the table
                     total_revenue=0
+                    total_expenditure=0
                     total_profit_loss=0
                     for pf in profit_loss:
-                        total_revenue+=pf[1]
-                        total_profit_loss+=pf[2]
+                        total_revenue+=pf[4]
+                        total_expenditure+=pf[5]
+                        total_profit_loss+=pf[6]
                         fabric_name = self.db_manager.get_fabric_name_by_id(pf[0])
-                        self.tree_profit_loss.insert("", "end", values=(pf[0],fabric_name,f'₹{pf[1]:.2f}', f"₹{pf[2]:.2f}"))
+                        self.tree_profit_loss.insert("", "end", values=(pf[0],fabric_name,f'{pf[1]:.2f}', f"₹{pf[2]:.2f}", f"₹{pf[3]:.2f}", f"₹{pf[4]:.2f}", f"₹{pf[5]:.2f}", f"₹{pf[6]:.2f}"))
                     if total_profit_loss!=0 and total_revenue!=0:
-                        self.tree_profit_loss.insert("", "end", values=("Total","",f'₹{total_revenue:.2f}', f"₹{total_profit_loss:.2f}"))
+                        self.tree_profit_loss.insert("", "end", values=("Total","","","","",f'₹{total_revenue:.2f}',f'₹{total_expenditure:.2f}', f"₹{total_profit_loss:.2f}"))
 
         except Exception as e:
             messagebox.showerror("Error", str(e)+"raised from summary")
+            
     def on_treeview_click(self, event):
         """Handle the click event on the 'Edit' column."""
         # Get the item under the cursor
@@ -461,43 +482,10 @@ class UIManager:
         column = self.tree_fabric_stock.identify_column(event.x)
 
         # Check if the click is on the "Edit" column (adjust column index if needed)
-        if column == "#4" and item_id:  # "#4" corresponds to the fourth column (Edit)
+        if column == "#6" and item_id:  # "#4" corresponds to the fourth column (Edit)
             # Extract fabric_id for the selected row and open the edit popup
             fabric_id = self.tree_fabric_stock.item(item_id, "values")[0]  # Assuming 'fabric_id' is the first value
             self.open_edit_popup_fabric(fabric_id)
-    def update_fabric_stock(self, event=None):
-        """Update the displayed stock based on the selected fabric from the dropdown."""
-        selected_fabric = self.fabric_selector_summary.selected_option
-
-        try:
-            if selected_fabric == "All":
-                # Show individual stock for all fabrics
-                all_fabrics_stock = self.db_manager.get_all_fabrics_stock()
-                self.label_stock_value.config(text="")  # Clear total stock label when showing individual fabrics
-
-                # Clear the table before inserting new data
-                for row in self.tree_fabric_stock.get_children():
-                    self.tree_fabric_stock.delete(row)
-
-                # Insert stock data for all fabrics into the table
-                for id, fabric, stock in all_fabrics_stock:
-                    self.tree_fabric_stock.insert("", "end", values=(id, fabric, stock))
-
-            else:
-                # Get stock for the selected fabric only
-                fabric_stock = self.db_manager.get_fabric_stock(selected_fabric)
-                fabric_id = self.db_manager.get_fabric_id(selected_fabric)
-                self.label_stock_value.config(text=f"{selected_fabric}  :  {fabric_stock} meters")
-
-                # Clear the table since only one fabric is selected
-                for row in self.tree_fabric_stock.get_children():
-                    self.tree_fabric_stock.delete(row)
-
-                # Insert the selected fabric's stock into the table
-                self.tree_fabric_stock.insert("", "end", values=(fabric_id ,selected_fabric, fabric_stock))
-
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
 
 
     def fetch_sales(self):
@@ -544,7 +532,7 @@ class UIManager:
 
         # Fetch current data for sale_id
         sale_data = self.db_manager.get_sale_by_id(sale_id)
-        _, _, quantity, selling_price, sale_date = sale_data
+        _, fabric_id, quantity, selling_price, sale_date = sale_data
 
         # Get the current date as the default
         current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -568,13 +556,25 @@ class UIManager:
         entry_date.grid(row=2, column=1)
 
         # "Save" button to apply updates to the database
-        btn_save = tk.Button(popup, text="Save", command=lambda: self.save_sale_edit(sale_id, entry_quantity.get(), entry_price.get(), entry_date.get()))
+        btn_save = tk.Button(popup, text="Save", command=lambda: self.save_sale_edit(fabric_id, sale_id, float(entry_quantity.get()), entry_price.get(), entry_date.get(),float(quantity), popup))
         btn_save.grid(row=3, column=0, columnspan=2, pady=10)
 
-    def save_sale_edit(self, sale_id, quantity, selling_price, sale_date):
+    def save_sale_edit(self, fabric_id, sale_id, quantity, selling_price, sale_date, prev_quan, popwin):
         # Validate and update data in the database
-        self.db_manager.update_sale_data(sale_id, quantity, selling_price, sale_date)
+        res1=self.db_manager.update_sale_data(sale_id, quantity, selling_price, sale_date)
         # Refresh the sales table view to reflect updates
+        quan= quantity-prev_quan
+        print(quan)
+        if quan>0:
+            res2= self.db_manager.update_stock(fabric_id, quan, "subtract")
+        if quan<0:
+            res2= self.db_manager.update_stock(fabric_id, abs(quan), "add")
+
+        if res1:
+            messagebox.showinfo("success","updated successfully")
+            popwin.destroy()
+        else:
+            messagebox.showerror("error","error occured while updating")
         self.fetch_sales()
 
 
@@ -604,7 +604,7 @@ class UIManager:
 
         # Fetch current data for purchase_id
         purchase_data = self.db_manager.get_purchase_by_id(purchase_id)
-        _, _, quantity, cost_price, purchase_date = purchase_data
+        _, fabric_id, quantity, cost_price, purchase_date = purchase_data
 
         # Get the current date as the default
         current_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -627,17 +627,26 @@ class UIManager:
         entry_date.insert(0,current_date)
         entry_date.grid(row=2, column=1)
         # "Save" button to apply updates to the database
-        btn_save = tk.Button(popup, text="Save", command=lambda: self.save_purchase_edit(purchase_id, entry_quantity.get(), entry_price.get(), entry_date.get(), popup))
+        btn_save = tk.Button(popup, text="Save", command=lambda: self.save_purchase_edit(fabric_id, purchase_id, float(entry_quantity.get()), entry_price.get(), entry_date.get(),float(quantity), popup))
         btn_save.grid(row=3, column=0, columnspan=2, pady=10)
 
-    def save_purchase_edit(self, purchase_id, quantity, cost_price, purchase_date,popwin):
+    def save_purchase_edit(self, fabric_id, purchase_id, quantity, cost_price, purchase_date,prev_quan, popwin):
         
         # Validate and update data in the database
-        res=self.db_manager.update_purchase_data(purchase_id, quantity, cost_price, purchase_date)
+        res1=self.db_manager.update_purchase_data(purchase_id, quantity, cost_price, purchase_date)
+        #update stock
+        quan= quantity-prev_quan
+        if quan>0:
+            res2= self.db_manager.update_stock(fabric_id, quan, "add")
+        if quan<0:
+            res2= self.db_manager.update_stock(fabric_id, abs(quan), "subtract")
+
+
         # Refresh the sales table view to reflect updates
-        if res:
+        if res1 and res2:
             messagebox.showinfo("success","updated successfully")
             popwin.destroy()
+            
         else:
             messagebox.showerror("error","error occured while updating")
         self.fetch_purchases()
@@ -671,8 +680,9 @@ class UIManager:
             messagebox.showinfo("success","updated successfully")
             popwin.destroy()
             self.fabric_selector_summary.selected_option=fabric_name
-            self.fabric_selector_summary.entry.delete(0,tk.END)
-            self.fabric_selector_summary.entry.insert(tk.END,fabric_name)
+            self.fabric_selector_summary.update_listView(ALL=True)
+            self.fabric_selector_purchase.update_listView()
+            self.fabric_selector_SALES.update_listView()
         else:
             messagebox.showerror("error","error occured while updating")
         self.update_summary()

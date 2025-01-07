@@ -73,7 +73,16 @@ class SearchableComboBox():
             self.selected_option=selected_option
             self.entry.delete(0, tk.END)
             self.entry.insert(0, selected_option)
-
+    def update_listView(self,ALL=False):
+        self.options = ["All",*self.db_manager.get_fabrics_list()] if ALL else self.db_manager.get_fabrics_list()
+        self.listbox.delete(0, tk.END)
+        self.entry.delete(0,tk.END)
+        for option in self.options:
+            self.listbox.insert(tk.END, option)
+        if ALL:
+            self.entry.insert(0,"All")
+            self.selected_option="All"
+            
 
     def show_dropdown(self, event=None):
         self.listbox.place(in_=self.entry, x=0, rely=1, relwidth=1.0, anchor="nw")
@@ -82,7 +91,7 @@ class SearchableComboBox():
         # Show dropdown for 2 seconds
         if self.dropdown_id: # Cancel any old events
             self.listbox.after_cancel(self.dropdown_id)
-        self.dropdown_id = self.listbox.after(2000, self.hide_dropdown)
+        self.dropdown_id = self.listbox.after(4000, self.hide_dropdown)
 
     def hide_dropdown(self):
         self.listbox.place_forget()
